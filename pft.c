@@ -177,7 +177,9 @@ Usage:  %s [-afhpvzCFLMNPSTVZ] [-c <cachelines>] [-m <size>[KMGP]]\n\
 #endif
 "	-a = affinitize test processes/threads to cpus.\n\
 	-f = use SCHED_FIFO policy for tests.\n\
-	-Z = mmap() /dev/zero for anonymous regions\n"
+	-Z = mmap() /dev/zero for anonymous regions\n
+	-H = use mmap(MAP_HUGETLB) for test regions\n"
+
 #ifdef USE_NOCLEAR
 "	-C = request kernel not to Clear pages to eliminate this\n\
 	     overhead.  Requires special kernel patch.\n"
@@ -214,6 +216,7 @@ long     sleepsec = 0;
 int      do_mlock = 0;
 int      no_clear = 0;		/* define even when !defined(USE_NOCLEAR) */
 size_t   multimap = 0L;		/* mmap() per test area */
+int      use_hugetlb = 0;
 
 int	mmap_fd;		/* for /dev/zero mappings */
 int	mmap_flags = MAP_ANONYMOUS;	/* default */
@@ -462,6 +465,15 @@ static void *
 valloc_shared(size_t size)
 {
 	return pft_mmap(size, MAP_SHARED, NULL);
+}
+
+/*
+ * valloc_hugetlb() - "allocate" hugetlb memory.
+ */
+static void *
+valloc_hugetlb(size_t size)
+{
+	return pft_mmap(size, MAP_HUGETLB|MAP_PRIVATE, NULL);
 }
 
 /*
@@ -740,6 +752,11 @@ alloc_test_memory(void)
 
 	if (do_shm) {
 		if (p = alloc_shm(bytes)) {
+			do_mbind(p, bytes);
+			do_noclear(p, bytes);
+		}
+	} else if (use_hugetlb) {
+		if (p = valloc_hugetlb(bytes)) {
 			do_mbind(p, bytes);
 			do_noclear(p, bytes);
 		}
@@ -1531,6 +1548,10 @@ main(int argc, char *argv[])
 
 		case 'Z':		/* use /dev/zero for private mappings */
 			use_dev_zero();
+			break;
+
+		case 'H':		/* use hugetlb for test region */
+			use_hugetlb = 1;
 			break;
 
 		case 'h':	/* help */
